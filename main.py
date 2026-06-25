@@ -1,4 +1,6 @@
 import asyncio
+from flask import Flask
+import threading
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram import Update
 import os
@@ -105,6 +107,19 @@ async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
     chat_id = job_data['chat_id']
     task_text = job_data['task_text']
     await context.bot.send_message(chat_id=chat_id, text=f"Напоминание: {task_text}")
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Бот работает!"
+
+def run_web():
+    app.run(host='0.0.0.0', port=10000)
+
+web_thread = threading.Thread(target=run_web)
+web_thread.daemon = True
+web_thread.start()
 
 application = Application.builder().token(token).build()
 application.add_handler(CommandHandler("start", start))
