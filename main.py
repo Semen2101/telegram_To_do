@@ -8,7 +8,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-token = os.getenv("TOKEN")
+token = os.environ.get("TOKEN") or os.getenv("TOKEN")
 tasks = {}
 
 async def start(update : Update, context : ContextTypes.DEFAULT_TYPE) :
