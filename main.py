@@ -12,6 +12,9 @@ load_dotenv()
 token = os.environ.get("TOKEN")
 tasks = {}
 
+print(f"Длина токена: {len(token) if token else 0}")
+print(f"Первые 10 символов: {token[:10] if token else 'None'}")
+
 async def start(update : Update, context : ContextTypes.DEFAULT_TYPE) :
     await update.message.reply_text("Привет! Я мопс!")
   
