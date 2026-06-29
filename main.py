@@ -1,23 +1,31 @@
 import asyncio
-from flask import Flask
-import threading
+import sys
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram import Update
 import os
 from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
+import textwrap
 
-# token = os.environ.get("TOKEN") or os.getenv("TOKEN")
 token = os.environ.get("TOKEN")
 tasks = {}
 
-print(f"Длина токена: {len(token) if token else 0}")
-print(f"Первые 10 символов: {token[:10] if token else 'None'}")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.message.from_user.username or "пользователь" 
+    message = textwrap.dedent(f"""\
+        Привет, {user_name}!
+        Вот все команды для работы с ботом (версия 1.0):
+        
+        1. /add "ваша задача" — добавит задачу в список
+        2. /list — покажет все ваши задачи с номерами
+        3. /delete "номер" — удалит задачу по номеру
+        4. /edit "номер" "новый текст" — изменит задачу
+        5. /remind "номер" "дата" "время" — установит напоминание
+           (формат: /remind 1 2026-06-29 18:00)
+    """)
+    await update.message.reply_text(message)
 
-async def start(update : Update, context : ContextTypes.DEFAULT_TYPE) :
-    await update.message.reply_text("Привет! Я мопс!")
-  
 async def add_task(update : Update, context : ContextTypes.DEFAULT_TYPE) :
     user_id = update.message.from_user.id
     if user_id not in tasks :
@@ -92,7 +100,9 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
             index = int(context.args[0]) - 1
             if 0 <= index < len(tasks[user_id]):
                 data = context.args[1] + " " + context.args[2]
-                data_time = datetime.strptime(data , "%Y-%m-%d %H:%M")
+                naive_dt = datetime.strptime(data, "%Y-%m-%d %H:%M")
+                local_tz = datetime.now().astimezone().tzinfo
+                data_time = naive_dt.replace(tzinfo=local_tz)
                 task_text = tasks[user_id][index]
                 context.job_queue.run_once(
                     callback=send_reminder,
@@ -107,30 +117,42 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
             await update.message.reply_text("Используйте только числа /remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ")
 
 async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
-    job_data = context.job.data
-    chat_id = job_data['chat_id']
-    task_text = job_data['task_text']
-    await context.bot.send_message(chat_id=chat_id, text=f"Напоминание: {task_text}")
+    try:
+        job_data = context.job.data
+        chat_id = job_data['chat_id']
+        task_text = job_data['task_text']
+        await context.bot.send_message(chat_id=chat_id, text=f"Напоминание: {task_text}")
+    except Exception as e :
+        print(f"ОШИБКА в send_reminder: {e}")
 
-app = Flask(__name__)
+async def main():
+    application = Application.builder().token(token).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("add", add_task))
+    application.add_handler(CommandHandler("list", task_list))
+    application.add_handler(CommandHandler("delete", delete))
+    application.add_handler(CommandHandler("edit", edit))
+    application.add_handler(CommandHandler("remind", remind))
 
-@app.route('/')
-def home():
-    return "Бот работает!"
+    print("JobQueue:", application.job_queue)
 
-def run_web():
-    app.run(host='0.0.0.0', port=10000)
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
 
-web_thread = threading.Thread(target=run_web)
-web_thread.daemon = True
-web_thread.start()
+    from aiohttp import web
+    async def handle(request):
+        return web.Response(text="Бот работает!")
 
-application = Application.builder().token(token).build()
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("add", add_task))
-application.add_handler(CommandHandler("list", task_list))
-application.add_handler(CommandHandler("delete", delete))
-application.add_handler(CommandHandler("edit", edit))
-application.add_handler(CommandHandler("remind", remind))
+    web_app = web.Application()
+    web_app.add_routes([web.get('/', handle)])
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 10000)
+    await site.start()
+    print("Web server started on port 10000")
 
-application.run_polling()
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    asyncio.run(main())
