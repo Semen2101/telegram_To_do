@@ -113,13 +113,21 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
         try:
             index = int(context.args[0]) - 1
             if 0 <= index < len(tasks[user_id]):
+                
                 data = context.args[1] + " " + context.args[2]
                 naive_dt = datetime.strptime(data, "%Y-%m-%d %H:%M")
                 data_time = naive_dt.replace(tzinfo=ZoneInfo("Europe/Berlin"))
+                
                 task_text = tasks[user_id][index]
+                
                 print("DEBUG: выполняется run_once...")
                 print("DEBUG data_time:", data_time)
                 print("DEBUG now (local):", datetime.now(ZoneInfo("Europe/Berlin")))
+                
+                if data_time > datetime.now(ZoneInfo("Europe/Berlin")):
+                        await update.message.reply_text("Это время уже прошло. Напоминание не установлено.")
+                        return
+                
                 context.job_queue.run_once(
                 callback=send_reminder,
                 when=data_time,
