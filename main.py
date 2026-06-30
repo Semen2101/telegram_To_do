@@ -124,7 +124,7 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
                 print("DEBUG data_time:", data_time)
                 print("DEBUG now (local):", datetime.now(ZoneInfo("Europe/Berlin")))
                 
-                if data_time > datetime.now(ZoneInfo("Europe/Berlin")):
+                if data_time <= datetime.now(ZoneInfo("Europe/Berlin")):
                         await update.message.reply_text("Это время уже прошло. Напоминание не установлено.")
                         return
                 
