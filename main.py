@@ -1,5 +1,7 @@
 import asyncio
 import sys
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram import Update
 import os
@@ -7,6 +9,18 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 import textwrap
+from zoneinfo import ZoneInfo
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Бот работает!"
+
+def run_web():
+    app.run(host='0.0.0.0', port=10000)
 
 token = os.environ.get("TOKEN")
 tasks = {}
@@ -96,27 +110,33 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
     else :
         if not context.args or len(context.args) != 3:
             await update.message.reply_text("/remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ, просьба соблюдать строгий синтаксис в дате тире во времени двоеточие")
-        try :
+        try:
             index = int(context.args[0]) - 1
             if 0 <= index < len(tasks[user_id]):
                 data = context.args[1] + " " + context.args[2]
                 naive_dt = datetime.strptime(data, "%Y-%m-%d %H:%M")
-                local_tz = datetime.now().astimezone().tzinfo
-                data_time = naive_dt.replace(tzinfo=local_tz)
+                data_time = naive_dt.replace(tzinfo=ZoneInfo("Europe/Berlin"))
                 task_text = tasks[user_id][index]
+                print("DEBUG: выполняется run_once...")
+                print("DEBUG data_time:", data_time)
+                print("DEBUG now (local):", datetime.now(ZoneInfo("Europe/Berlin")))
                 context.job_queue.run_once(
-                    callback=send_reminder,
-                    when=data_time,
-                    data={'chat_id': update.message.chat_id, 'task_text': task_text}
+                callback=send_reminder,
+                when=data_time,
+                data={'chat_id': update.message.chat_id, 'task_text': task_text}
                 )
+                print("DEBUG: run_once выполнена успешно")
                 await update.message.reply_text(f"Напоминание установлено на {data}")
-            else :
-                await update.message.reply_text("такой задачи нету ")
-            
-        except ValueError :
-            await update.message.reply_text("Используйте только числа /remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ")
+            else:
+                await update.message.reply_text("такой задачи нету")
+        except ValueError:
+            await update.message.reply_text("Неверный формат даты/времени. Используйте /remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ")
+        except Exception as e:
+            print(f"!!! ОШИБКА в remind: {e}")
+            await update.message.reply_text("Произошла внутренняя ошибка.")
 
 async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
+    print("=== CALLBACK CALLED ===")
     try:
         job_data = context.job.data
         chat_id = job_data['chat_id']
@@ -125,34 +145,24 @@ async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e :
         print(f"ОШИБКА в send_reminder: {e}")
 
-async def main():
-    application = Application.builder().token(token).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("add", add_task))
-    application.add_handler(CommandHandler("list", task_list))
-    application.add_handler(CommandHandler("delete", delete))
-    application.add_handler(CommandHandler("edit", edit))
-    application.add_handler(CommandHandler("remind", remind))
 
-    print("JobQueue:", application.job_queue)
+async def test_job(update, context):
+    context.job_queue.run_once(lambda ctx: print("TEST CALLBACK RAN"), when=5)
+    await update.message.reply_text("ждём 5 секунд...")
 
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
+# Запускаем Flask в фоновом потоке
+web_thread = threading.Thread(target=run_web)
+web_thread.daemon = True
+web_thread.start()
+print("Web server started on port 10000")
 
-    from aiohttp import web
-    async def handle(request):
-        return web.Response(text="Бот работает!")
+# Создаём и запускаем бота (синхронно, без asyncio.run)
+application = Application.builder().token(token).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("add", add_task))
+application.add_handler(CommandHandler("list", task_list))
+application.add_handler(CommandHandler("delete", delete))
+application.add_handler(CommandHandler("edit", edit))
+application.add_handler(CommandHandler("remind", remind))
 
-    web_app = web.Application()
-    web_app.add_routes([web.get('/', handle)])
-    runner = web.AppRunner(web_app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 10000)
-    await site.start()
-    print("Web server started on port 10000")
-
-    await asyncio.Event().wait()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+application.run_polling()
