@@ -1,0 +1,21 @@
+{
+  "659288571": {
+    "tasks": [
+      "pops13"
+    ],
+    "reminders": [
+      {
+        "task_index": 0,
+        "datetime_str": "2026-07-03T11:38:00+02:00",
+        "chat_id": 659288571,
+        "completed": true
+      },
+      {
+        "task_index": 0,
+        "datetime_str": "2026-07-03T11:40:00+02:00",
+        "chat_id": 659288571,
+        "completed": true
+      }
+    ]
+  }
+}
