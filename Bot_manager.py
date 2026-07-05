@@ -19,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         3. /delete "номер" — удалит задачу по номеру
         4. /edit "номер" "новый текст" — изменит задачу
         5. /remind "номер" "дата" "время" — установит напоминание
-           (формат: /remind 1 2026-06-29 18:00)
+           (формат: /remind 1 2006-12-08 03:15)
     """)
     await update.message.reply_text(message)
 
@@ -161,4 +161,45 @@ async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e :
         print(f"ОШИБКА в send_reminder: {e}")
 
+async def show_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
+    user_id = update.message.from_user.id
 
+    if user_id not in tasks:
+        tasks[user_id] = {"tasks": [], "reminders": []}
+        await update.message.reply_text("У вас нет активных напоминаний.")
+        return
+
+    user_data = tasks[user_id]
+    reminders = user_data.get("reminders", [])
+    tasks_list = user_data.get("tasks", [])
+
+    if not reminders:
+        await update.message.reply_text("У вас нет активных напоминаний.")
+        return
+    
+    message_lines = ["📋 Ваши напоминания:"]
+    for i, remind in enumerate(reminders, start=1):
+        task_index = remind.get("task_index")
+        # Проверяем, существует ли задача с таким индексом
+        if task_index is not None and 0 <= task_index < len(tasks_list):
+            task_text = tasks_list[task_index]
+        else:
+            task_text = "(задача удалена)"
+
+        # Преобразуем дату в читаемый формат (если datetime_str есть)
+        datetime_str = remind.get("datetime_str", "")
+        try:
+            # Парсим ISO строку и форматируем под нужный вид
+            dt = datetime.fromisoformat(datetime_str)
+            formatted_date = dt.strftime("%d.%m.%Y %H:%M")
+        except (ValueError, TypeError):
+            formatted_date = datetime_str  # если не удалось распарсить, выводим как есть
+
+        completed = remind.get("completed", False)
+        status = "✅" if completed else "❌"
+
+        # Собираем строку
+        line = f'{i}. "{task_text}" В: {formatted_date} completed: {completed} {status}'
+        message_lines.append(line)
+
+    await update.message.reply_text("\n".join(message_lines))

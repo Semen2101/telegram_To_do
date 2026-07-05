@@ -39,6 +39,7 @@ application.add_handler(CommandHandler("list", task_list))
 application.add_handler(CommandHandler("delete", delete))
 application.add_handler(CommandHandler("edit", edit))
 application.add_handler(CommandHandler("remind", remind))
+application.add_handler(CommandHandler("list_r", show_remind))
 
 for user_id, data in tasks.items():
     for rem in data.get("reminders", []):
