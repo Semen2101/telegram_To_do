@@ -5,8 +5,14 @@ import textwrap
 from zoneinfo import ZoneInfo
 from json_manager import *
 
-raw = load_data()
-tasks = {int(k): v for k, v in raw.items()}
+tasks = None
+
+def init_tasks():
+    global tasks
+    raw = load_data()
+    tasks = {int(k): v for k, v in raw.items()}
+    if tasks is None:
+        tasks = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.from_user.username or "пользователь" 
@@ -24,6 +30,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message)
 
 async def add_task(update : Update, context : ContextTypes.DEFAULT_TYPE) :
+    if tasks is None:
+        init_tasks()
     user_id = update.message.from_user.id
     if user_id not in tasks :
         tasks[user_id] = {"tasks": [], "reminders": []}
@@ -38,6 +46,8 @@ async def add_task(update : Update, context : ContextTypes.DEFAULT_TYPE) :
         await update.message.reply_text(f"Задача добавлена: {task_text}")
 
 async def task_list(update : Update, context : ContextTypes.DEFAULT_TYPE) :
+    if tasks is None:
+        init_tasks()
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id]["tasks"] :
         tasks[user_id] = {"tasks": [], "reminders": []}
@@ -48,6 +58,8 @@ async def task_list(update : Update, context : ContextTypes.DEFAULT_TYPE) :
         await update.message.reply_text(message_)
 
 async def delete(update : Update, context : ContextTypes.DEFAULT_TYPE) :
+    if tasks is None:
+        init_tasks()
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id]["tasks"] :
         tasks[user_id] = {"tasks": [], "reminders": []}
@@ -68,6 +80,8 @@ async def delete(update : Update, context : ContextTypes.DEFAULT_TYPE) :
             await update.message.reply_text("Номер должен быть числом")
 
 async def edit(update : Update, context : ContextTypes.DEFAULT_TYPE) :
+    if tasks is None:
+        init_tasks()
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id]["tasks"] :
         tasks[user_id] = {"tasks": [], "reminders": []}
@@ -89,6 +103,8 @@ async def edit(update : Update, context : ContextTypes.DEFAULT_TYPE) :
             await update.message.reply_text("Номер должен быть числом")
 
 async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
+    if tasks is None:
+        init_tasks()
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id]["tasks"] :
         tasks[user_id] = {"tasks": [], "reminders": []}
@@ -145,6 +161,8 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
             await update.message.reply_text("Произошла внутренняя ошибка.")
 
 async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
+    if tasks is None:
+        init_tasks()    
     print("=== CALLBACK CALLED ===")
     try:
         job_data = context.job.data
@@ -162,6 +180,8 @@ async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
         print(f"ОШИБКА в send_reminder: {e}")
 
 async def show_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
+    if tasks is None:
+        init_tasks()
     user_id = update.message.from_user.id
 
     if user_id not in tasks:
