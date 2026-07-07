@@ -1,11 +1,17 @@
-import asyncio
+import os
 import sys
+
+# Создаём firebase-key.json из переменной окружения, если его нет (для Render)
+if not os.path.exists("firebase-key.json") and os.environ.get("FIREBASE_KEY_JSON"):
+    with open("firebase-key.json", "w") as f:
+        f.write(os.environ["FIREBASE_KEY_JSON"])
+
+import asyncio
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from telegram.ext import Application, CommandHandler
-import os
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv()  # ← переменные окружения загружены
 from flask import Flask
 import threading
 from datetime import datetime
@@ -22,17 +28,13 @@ def run_web():
 
 token = os.environ.get("TOKEN")
 
-# Импортируем функции бота
+# Импортируем функции бота ПОСЛЕ загрузки .env
 from Bot_manager import (
     start, add_task, task_list, delete, edit, remind, show_remind, send_reminder, init_tasks, tasks
 )
 
-import os
-if not os.path.exists("firebase-key.json") and os.environ.get("FIREBASE_KEY_JSON"):
-    with open("firebase-key.json", "w") as f:
-        f.write(os.environ["FIREBASE_KEY_JSON"])
-
-from json_manager import load_data
+# Инициализируем данные из Firebase
+init_tasks()
 
 # Запускаем Flask в фоновом потоке
 web_thread = threading.Thread(target=run_web)
@@ -51,10 +53,6 @@ application.add_handler(CommandHandler("remind", remind))
 application.add_handler(CommandHandler("list_r", show_remind))
 
 # Восстановление напоминаний
-from Bot_manager import init_tasks
-init_tasks()
-from Bot_manager import tasks
-
 if tasks is None:
     tasks = {}
 
