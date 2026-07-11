@@ -1,9 +1,10 @@
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 from telegram import Update
 from datetime import datetime
 import textwrap
 from zoneinfo import ZoneInfo
 from json_manager import *
+from KeyBoard import *
 
 tasks = None
 
@@ -18,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.from_user.username or "пользователь" 
     message = textwrap.dedent(f"""\
         Привет, {user_name}!
-        Вот все команды для работы с ботом (версия 1.0):
+        Вот все команды для работы с ботом (версия 2.0 progres debug list(complete = start, add. progres = delete)):
         
         1. /add "ваша задача" — добавит задачу в список
         2. /list — покажет все ваши задачи с номерами
@@ -26,8 +27,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         4. /edit "номер" "новый текст" — изменит задачу
         5. /remind "номер" "дата" "время" — установит напоминание
            (формат: /remind 1 2006-12-08 03:15)
+        6. /list_r — покажет все ваши напоминания
+        7. /delete_r — удалит все выполненные напоминания
+        8. /p — открыть меню команд
     """)
     await update.message.reply_text(message)
+    await keyBoard(update, context)
 
 async def add_task(update : Update, context : ContextTypes.DEFAULT_TYPE) :
     if tasks is None:
@@ -148,6 +153,9 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
                     "chat_id": update.message.chat_id,
                     "completed": False
                 }
+                if "reminders" not in tasks[user_id]:
+                    tasks[user_id]["reminders"] = []
+
                 tasks[user_id]["reminders"].append(reminder_data)
                 save_data(tasks)
 
@@ -157,8 +165,10 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
         except ValueError:
             await update.message.reply_text("Неверный формат даты/времени. Используйте /remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ")
         except Exception as e:
-            print(f"!!! ОШИБКА в remind: {e}")
-            await update.message.reply_text("Произошла внутренняя ошибка.")
+            import traceback
+            print("!!! ОШИБКА в remind:")
+            traceback.print_exc()
+            await update.message.reply_text(f"Произошла внутренняя ошибка: {e}")
 
 async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
     if tasks is None:
@@ -223,3 +233,61 @@ async def show_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
         message_lines.append(line)
 
     await update.message.reply_text("\n".join(message_lines))
+
+async def delete_complete_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
+    if tasks is None:
+        init_tasks()
+    user_id = update.message.from_user.id
+    if user_id not in tasks:
+        tasks[user_id] = {"tasks": [], "reminders": []}
+        await update.message.reply_text("У вас нет напоминаний.")
+        return
+    
+    old_count = len(tasks[user_id]["reminders"])
+    tasks[user_id]["reminders"] = [
+        rem for rem in tasks[user_id]["reminders"]
+        if not rem.get("completed")
+    ]
+    deleted_count = old_count - len(tasks[user_id]["reminders"])
+    
+    if deleted_count > 0:
+        save_data(tasks)
+        await update.message.reply_text(f"Удалено выполненных напоминаний: {deleted_count}")
+    else:
+        await update.message.reply_text("Нет выполненных напоминаний для удаления.")
+
+
+######################################################################################################################################################
+######################################################################################################################################################
+######################################################################################################################################################
+
+WAITING_FOR_TASK_TEXT = 1
+
+async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Введите текст задачи (или /cancel для отмены):")
+    return WAITING_FOR_TASK_TEXT
+
+async def add_task_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    task_text = update.message.text
+    context.args = update.message.text.split()
+    await add_task(update, context)
+    await update.message.reply_text(f"Задача '{task_text}' добавлена!")
+    return ConversationHandler.END
+
+######################################################################################################################################################
+
+async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Введите номер задачи (или /cancel для отмены):")
+    return WAITING_FOR_TASK_TEXT
+
+async def delete_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    delete_num = update.message.text
+    await delete(update, context)
+    await update.message.reply_text(f"Задача '{delete_num}' удалена!")
+    return ConversationHandler.END
+
+######################################################################################################################################################
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("отменено.")
+    return ConversationHandler.END

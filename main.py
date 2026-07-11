@@ -9,13 +9,15 @@ if not os.path.exists("firebase-key.json") and os.environ.get("FIREBASE_KEY_JSON
 import asyncio
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from dotenv import load_dotenv
 load_dotenv()  # ← переменные окружения загружены
 from flask import Flask
 import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from KeyBoard import *
+from messagehandler import *
 
 app = Flask(__name__)
 
@@ -29,9 +31,7 @@ def run_web():
 token = os.environ.get("TOKEN")
 
 # Импортируем функции бота ПОСЛЕ загрузки .env
-from Bot_manager import (
-    start, add_task, task_list, delete, edit, remind, show_remind, send_reminder, init_tasks, tasks
-)
+from Bot_manager import *
 
 # Инициализируем данные из Firebase
 init_tasks()
@@ -47,10 +47,17 @@ application = Application.builder().token(token).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("add", add_task))
 application.add_handler(CommandHandler("list", task_list))
+application.add_handler(MessageHandler(filters.Text(["📋 Список"]), task_list))
 application.add_handler(CommandHandler("delete", delete))
+application.add_handler(delete_conv_handler)
 application.add_handler(CommandHandler("edit", edit))
 application.add_handler(CommandHandler("remind", remind))
 application.add_handler(CommandHandler("list_r", show_remind))
+application.add_handler(CommandHandler("delete_r", delete_complete_remind))
+application.add_handler(CommandHandler("p", keyBoard))
+application.add_handler(MessageHandler(filters.Text(["Скрыть меню"]), hide_keyBoard))
+application.add_handler(add_conv_handler)
+
 
 # Восстановление напоминаний
 if tasks is None:
