@@ -45,18 +45,18 @@ print("Web server started on port 10000")
 # Создаём и запускаем бота
 application = Application.builder().token(token).build()
 application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("add", add_task))
+application.add_handler(add_conv_handler)
 application.add_handler(CommandHandler("list", task_list))
 application.add_handler(MessageHandler(filters.Text(["📋 Список"]), task_list))
-application.add_handler(CommandHandler("delete", delete))
 application.add_handler(delete_conv_handler)
-application.add_handler(CommandHandler("edit", edit))
-application.add_handler(CommandHandler("remind", remind))
+application.add_handler(edit_conv_handler)
+application.add_handler(remind_conv_handler)
 application.add_handler(CommandHandler("list_r", show_remind))
+application.add_handler(MessageHandler(filters.Text(["📌 Список напоминаний"]), show_remind))
 application.add_handler(CommandHandler("delete_r", delete_complete_remind))
+application.add_handler(MessageHandler(filters.Text(["🧹 Очистить выполненные"]), delete_complete_remind))
 application.add_handler(CommandHandler("p", keyBoard))
 application.add_handler(MessageHandler(filters.Text(["Скрыть меню"]), hide_keyBoard))
-application.add_handler(add_conv_handler)
 
 
 # Восстановление напоминаний
