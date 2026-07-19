@@ -19,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.from_user.username or "пользователь" 
     message = textwrap.dedent(f"""\
         Привет, {user_name}!
-        Вот все команды для работы с ботом (версия 2.0 progres debug list(complete = start, add. progres = delete)):
+        Вот все команды для работы с ботом (v3 relese auto delete message)):
         
         1. /add "ваша задача" — добавит задачу в список
         2. /list — покажет все ваши задачи с номерами
@@ -42,7 +42,7 @@ async def add_task(update : Update, context : ContextTypes.DEFAULT_TYPE) :
         tasks[user_id] = {"tasks": [], "reminders": []}
 
     if not context.args :
-        await update.message.reply_text("Введите задачу после команды /add")
+        await send_self_destruct_message(update, context, "Введите задачу после команды /add")
     else :
         task_text = " ".join(context.args)
         tasks[user_id]["tasks"].append(task_text)
@@ -55,11 +55,11 @@ async def task_list(update : Update, context : ContextTypes.DEFAULT_TYPE) :
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id]["tasks"] :
         tasks[user_id] = {"tasks": [], "reminders": []}
-        await update.message.reply_text("У вас нету задач") 
+        await send_self_destruct_message(update, context, "У вас нету задач") 
     else :
         user_task = tasks[user_id]["tasks"]
         message_ = "\n".join(f"{i}. {task}" for i, task in enumerate(user_task, start=1))
-        await update.message.reply_text(message_)
+        await send_self_destruct_message(update, context, message_)
 
 async def delete(update : Update, context : ContextTypes.DEFAULT_TYPE) :
     if tasks is None:
@@ -67,21 +67,21 @@ async def delete(update : Update, context : ContextTypes.DEFAULT_TYPE) :
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id]["tasks"] :
         tasks[user_id] = {"tasks": [], "reminders": []}
-        await update.message.reply_text("У вас нету задач")
+        await send_self_destruct_message(update, context, "У вас нету задач")
     else :
         if not context.args :
-            await update.message.reply_text("введите номер задачи после команды /delete ")
+            await send_self_destruct_message(update, context, "введите номер задачи после команды /delete ")
         try :
             index = int(context.args[0]) -1
             if 0 <= index < len(tasks[user_id]["tasks"]):
                 removed_task = tasks[user_id]["tasks"].pop(index)
                 save_data(tasks)
                 print(removed_task)
-                await update.message.reply_text(f"Задача '{removed_task}' удалена!")
+                await send_self_destruct_message(update, context, f"Задача '{removed_task}' удалена!")
             else :
-                await update.message.reply_text("Задачи с таким номером не существует")
+                await send_self_destruct_message(update, context, "Задачи с таким номером не существует")
         except ValueError:
-            await update.message.reply_text("Номер должен быть числом")
+            await send_self_destruct_message(update, context, "Номер должен быть числом")
 
 async def edit(update : Update, context : ContextTypes.DEFAULT_TYPE) :
     if tasks is None:
@@ -89,10 +89,10 @@ async def edit(update : Update, context : ContextTypes.DEFAULT_TYPE) :
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id]["tasks"] :
         tasks[user_id] = {"tasks": [], "reminders": []}
-        await update.message.reply_text("У вас нету задач")
+        await send_self_destruct_message(update, context, "У вас нету задач")
     else :
         if not context.args :
-            await update.message.reply_text("Укажите номер задачи и новый текст после команды /edit ")
+            await send_self_destruct_message(update, context, "Укажите номер задачи и новый текст после команды /edit ")
         try :
             index = int(context.args[0]) - 1
             if 0 <= index < len(tasks[user_id]["tasks"]) and len(context.args) >= 2:
@@ -100,11 +100,11 @@ async def edit(update : Update, context : ContextTypes.DEFAULT_TYPE) :
                 new_text = " ".join(context.args[1:])
                 tasks[user_id]["tasks"][index] = new_text
                 save_data(tasks)
-                await update.message.reply_text(f"Задача '{old}' изменена на '{new_text}'.")
+                await send_self_destruct_message(update, context, f"Задача '{old}' изменена на '{new_text}'.")
             else :
-                await update.message.reply_text("Введите новый текст задачи после команды /edit")    
+                await send_self_destruct_message(update, context, "Введите новый текст задачи после команды /edit")    
         except ValueError :
-            await update.message.reply_text("Номер должен быть числом")
+            await send_self_destruct_message(update, context, "Номер должен быть числом")
 
 async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
     if tasks is None:
@@ -112,10 +112,10 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id]["tasks"] :
         tasks[user_id] = {"tasks": [], "reminders": []}
-        await update.message.reply_text("У вас нету задач")
+        await send_self_destruct_message(update, context, "У вас нету задач")
     else :
         if not context.args or len(context.args) != 3:
-            await update.message.reply_text("/remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ, просьба соблюдать строгий синтаксис в дате тире во времени двоеточие")
+            await send_self_destruct_message(update, context, "/remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ, просьба соблюдать строгий синтаксис в дате тире во времени двоеточие")
         try:
             index = int(context.args[0]) - 1
             if 0 <= index < len(tasks[user_id]["tasks"]):
@@ -131,7 +131,7 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
                 print("DEBUG now (local):", datetime.now(ZoneInfo("Europe/Berlin")))
                 
                 if data_time <= datetime.now(ZoneInfo("Europe/Berlin")):
-                        await update.message.reply_text("Это время уже прошло. Напоминание не установлено.")
+                        await send_self_destruct_message(update, context, "Это время уже прошло. Напоминание не установлено.")
                         return
                 
                 context.job_queue.run_once(
@@ -158,16 +158,16 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
                 tasks[user_id]["reminders"].append(reminder_data)
                 save_data(tasks)
 
-                await update.message.reply_text(f"Напоминание установлено на {data}")
+                await send_self_destruct_message(update, context, f"Напоминание установлено на {data}")
             else:
-                await update.message.reply_text("такой задачи нету")
+                await send_self_destruct_message(update, context, "такой задачи нету")
         except ValueError:
-            await update.message.reply_text("Неверный формат даты/времени. Используйте /remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ")
+            await send_self_destruct_message(update, context, "Неверный формат даты/времени. Используйте /remind НОМЕР ГГГГ-ММ-ДД ЧЧ:ММ")
         except Exception as e:
             import traceback
             print("!!! ОШИБКА в remind:")
             traceback.print_exc()
-            await update.message.reply_text(f"Произошла внутренняя ошибка: {e}")
+            await send_self_destruct_message(update, context, f"Произошла внутренняя ошибка: {e}")
 
 async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
     if tasks is None:
@@ -177,7 +177,11 @@ async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
         job_data = context.job.data
         chat_id = job_data['chat_id']
         task_text = job_data['task_text']
-        await context.bot.send_message(chat_id=chat_id, text=f"Напоминание: {task_text}")
+        sent_message = await context.bot.send_message(chat_id=chat_id, text=f"Напоминание: {task_text}")
+        context.job_queue.run_once(
+            delete_message_callback,
+            when=600,  # 10 минут
+            data={"chat_id": sent_message.chat_id, "message_id": sent_message.message_id})
 
         reminders = tasks[chat_id]["reminders"]
         for rem in reminders :
@@ -195,7 +199,7 @@ async def show_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
 
     if user_id not in tasks:
         tasks[user_id] = {"tasks": [], "reminders": []}
-        await update.message.reply_text("У вас нет активных напоминаний.")
+        await send_self_destruct_message(update, context, "У вас нет активных напоминаний.")
         return
 
     user_data = tasks[user_id]
@@ -203,7 +207,7 @@ async def show_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
     tasks_list = user_data.get("tasks", [])
 
     if not reminders:
-        await update.message.reply_text("У вас нет активных напоминаний.")
+        await send_self_destruct_message(update, context, "У вас нет активных напоминаний.")
         return
     
     message_lines = ["📋 Ваши напоминания:"]
@@ -231,7 +235,7 @@ async def show_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
         line = f'{i}. "{task_text}" В: {formatted_date} completed: {completed} {status}'
         message_lines.append(line)
 
-    await update.message.reply_text("\n".join(message_lines))
+    await send_self_destruct_message(update, context, "\n".join(message_lines))
 
 async def delete_complete_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
     if tasks is None:
@@ -239,7 +243,7 @@ async def delete_complete_remind(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.message.from_user.id
     if user_id not in tasks:
         tasks[user_id] = {"tasks": [], "reminders": []}
-        await update.message.reply_text("У вас нет напоминаний.")
+        await send_self_destruct_message(update, context, "У вас нет напоминаний.")
         return
     
     old_count = len(tasks[user_id]["reminders"])
@@ -251,9 +255,9 @@ async def delete_complete_remind(update: Update, context: ContextTypes.DEFAULT_T
     
     if deleted_count > 0:
         save_data(tasks)
-        await update.message.reply_text(f"Удалено выполненных напоминаний: {deleted_count}")
+        await send_self_destruct_message(update, context, f"Удалено выполненных напоминаний: {deleted_count}")
     else:
-        await update.message.reply_text("Нет выполненных напоминаний для удаления.")
+        await send_self_destruct_message(update, context, "Нет выполненных напоминаний для удаления.")
 
 
 ######################################################################################################################################################
@@ -263,14 +267,14 @@ async def delete_complete_remind(update: Update, context: ContextTypes.DEFAULT_T
 WAITING_FOR_TASK_TEXT = 1
 
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Введите текст задачи (или /cancel для отмены):")
+    await send_self_destruct_message(update, context, "Введите текст задачи (или /cancel для отмены):")
     return WAITING_FOR_TASK_TEXT
 
 async def add_task_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task_text = update.message.text
     context.args = update.message.text.split()
     await add_task(update, context)
-    await update.message.reply_text(f"Задача '{task_text}' добавлена!")
+    await send_self_destruct_message(update, context, f"Задача '{task_text}' добавлена!")
     return ConversationHandler.END
 
 ######################################################################################################################################################
@@ -278,7 +282,7 @@ async def add_task_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 WAITING_FOR_TASK_NUM = 2
 
 async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Введите номер задачи (или /cancel для отмены):")
+    await send_self_destruct_message(update, context, "Введите номер задачи (или /cancel для отмены):")
     return WAITING_FOR_TASK_NUM
 
 async def delete_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -293,7 +297,7 @@ WAITING_FOR_EDIT_NUM1 = 3
 WAITING_FOR_EDIT_TEXT1 = 4
 
 async def edit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Введите номер задачи для редактирования (или /cancel для отмены):")
+    await send_self_destruct_message(update, context, "Введите номер задачи для редактирования (или /cancel для отмены):")
     return WAITING_FOR_EDIT_NUM1
 
 async def edit_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -303,20 +307,20 @@ async def edit_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id in tasks and 0 <= index < len(tasks[user_id]["tasks"]):
             # Сохраняем номер для следующего шага
             context.user_data['edit_index'] = index
-            await update.message.reply_text("Введите новый текст задачи:")
+            await send_self_destruct_message(update, context, "Введите новый текст задачи:")
             return WAITING_FOR_EDIT_TEXT1
         else:
-            await update.message.reply_text("Неверный номер. Попробуйте снова (или /cancel):")
+            await send_self_destruct_message(update, context, "Неверный номер. Попробуйте снова (или /cancel):")
             return None  # остаёмся в том же состоянии
     except ValueError:
-        await update.message.reply_text("Это не число. Введите номер задачи:")
+        await send_self_destruct_message(update, context, "Это не число. Введите номер задачи:")
         return None
 
 async def edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_text = update.message.text
     index = context.user_data.get('edit_index')
     if index is None:
-        await update.message.reply_text("Ошибка: не найден номер задачи. Диалог отменён.")
+        await send_self_destruct_message(update, context, "Ошибка: не найден номер задачи. Диалог отменён.")
         return ConversationHandler.END
     
     # Эмулируем команду /edit <номер> <новый текст>
@@ -338,13 +342,13 @@ WAITING_FOR_REMIND_CALENDAR = 7
 async def remind_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id].get("tasks"):
-        await update.message.reply_text("У вас нет задач для напоминания.")
+        await send_self_destruct_message(update, context, "У вас нет задач для напоминания.")
         return ConversationHandler.END
 
     task_list = "\n".join(
         f"{i}. {task}" for i, task in enumerate(tasks[user_id]["tasks"], start=1)
     )
-    await update.message.reply_text(
+    await send_self_destruct_message(update, context, 
         f"Ваши задачи:\n{task_list}\n\nВведите номер задачи (или /cancel для отмены):"
     )
     return WAITING_FOR_REMIND_NUM
@@ -367,15 +371,15 @@ async def remind_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [btn, btn1, btn2], [btn_cancel]
             ]
 
-            await update.message.reply_text("Выберите год:", reply_markup=InlineKeyboardMarkup(buttons_rows))
+            await send_self_destruct_message(update, context, "Выберите год:", reply_markup=InlineKeyboardMarkup(buttons_rows))
 
             return WAITING_FOR_REMIND_CALENDAR
         else:
             # НЕВЕРНЫЙ НОМЕР
-            await update.message.reply_text("Такой задачи не существует. Введите номер существующей задачи (или /cancel).")
+            await send_self_destruct_message(update, context, "Такой задачи не существует. Введите номер существующей задачи (или /cancel).")
             return None
     except ValueError:
-        await update.message.reply_text("Введите номер задачи числом (или /cancel).")
+        await send_self_destruct_message(update, context, "Введите номер задачи числом (или /cancel).")
         return None
     
 async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -393,6 +397,11 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
             await cancel(orig_update, context)
         else:
             await query.edit_message_text("Напоминание отменено.")
+            context.job_queue.run_once(
+                delete_message_callback,
+                when=10,  # 10 секунд, чтобы успеть прочитать
+                data={"chat_id": query.message.chat_id, "message_id": query.message.message_id}
+            )
         return ConversationHandler.END
 
     parts = data.split("|")
@@ -421,7 +430,7 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
                 btn = InlineKeyboardButton(m[0], callback_data=callback)
                 btn_row_m[2].append(btn)
 
-        await query.edit_message_text("Выберите месяц:", reply_markup=InlineKeyboardMarkup(btn_row_m)) 
+        await query.edit_message_text("Выберите месяц:", reply_markup=InlineKeyboardMarkup(btn_row_m))
 
     elif step == "month":
         year = int(parts[2])
@@ -482,6 +491,11 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
 
         if dt <= datetime.now(ZoneInfo("Europe/Berlin")):
             await query.edit_message_text("Это время уже прошло. Напоминание не установлено.")
+            context.job_queue.run_once(
+                delete_message_callback,
+                when=10,
+                data={"chat_id": query.message.chat_id, "message_id": query.message.message_id})
+            
             context.user_data.clear()
             return ConversationHandler.END
 
@@ -493,9 +507,15 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
 
         orig_update = context.user_data.get("original_update")
         if orig_update:
+            await query.delete_message()
             await remind(orig_update, context)
         else:
             await query.edit_message_text("Ошибка: не удалось восстановить сессию.")
+            context.job_queue.run_once(
+                delete_message_callback,
+                when=10,
+                data={"chat_id": query.message.chat_id, "message_id": query.message.message_id}
+            )
 
         # Очищаем временные данные
         context.user_data.clear()
@@ -569,35 +589,24 @@ def build_calendar_keyboard(year, month):
     return InlineKeyboardMarkup(keyboard)
 
 ######################################################################################################################################################
+
+async def send_self_destruct_message(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, delete_after: int = 600, reply_markup=None):
+    sent_message = await update.message.reply_text(text, reply_markup=reply_markup)
+    context.job_queue.run_once(
+        delete_message_callback,
+        when=delete_after,
+        data={"chat_id": sent_message.chat_id, "message_id": sent_message.message_id}
+    )
+    return sent_message 
+
+async def delete_message_callback(context: ContextTypes.DEFAULT_TYPE):
+    job_data = context.job.data
+    try:
+        await context.bot.delete_message(chat_id=job_data["chat_id"], message_id=job_data["message_id"])
+    except Exception as e:
+        print(f"Не удалось удалить сообщение: {e}")
+
+######################################################################################################################################################
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("отменено.")
+    await send_self_destruct_message(update, context, "отменено.")
     return ConversationHandler.END
-
-
-
-
-    # callback_m1 = f"remind_calendar|month|{year}|1|None|None|None"
-    # btn_m1 = InlineKeyboardButton("Январь", callback_data=callback_m1)
-    # callback_m2 = f"remind_calendar|month|{year}|2|None|None|None"
-    # btn_m2 = InlineKeyboardButton("Февраль", callback_data=callback_m2)
-    # callback_m3 = f"remind_calendar|month|{year}|3|None|None|None"
-    # btn_m3 = InlineKeyboardButton("Март", callback_data=callback_m3)
-    # callback_m4 = f"remind_calendar|month|{year}|4|None|None|None"
-    # btn_m4 = InlineKeyboardButton("Апрель", callback_data=callback_m4)
-    # callback_m5 = f"remind_calendar|month|{year}|5|None|None|None"
-    # btn_m5 = InlineKeyboardButton("Май", callback_data=callback_m5)
-    # callback_m6 = f"remind_calendar|month|{year}|6|None|None|None"
-    # btn_m6 = InlineKeyboardButton("Июнь", callback_data=callback_m6)
-    # callback_m7 = f"remind_calendar|month|{year}|7|None|None|None"
-    # btn_m7 = InlineKeyboardButton("Июль", callback_data=callback_m7)
-    # callback_m8 = f"remind_calendar|month|{year}|8|None|None|None"
-    # btn_m8 = InlineKeyboardButton("Август", callback_data=callback_m8)
-    # callback_m9 = f"remind_calendar|month|{year}|9|None|None|None"
-    # btn_m9 = InlineKeyboardButton("Сентябрь", callback_data=callback_m9)
-    # callback_m10 = f"remind_calendar|month|{year}|10|None|None|None"
-    # btn_m10 = InlineKeyboardButton("Октябрь", callback_data=callback_m10)
-    # callback_m11 = f"remind_calendar|month|{year}|11|None|None|None"
-    # btn_m11 = InlineKeyboardButton("Ноябрь", callback_data=callback_m11)
-    # callback_m12 = f"remind_calendar|month|{year}|12|None|None|None"
-    # btn_m12 = InlineKeyboardButton("Декабрь", callback_data=callback_m12)
-    # btn_cancel = InlineKeyboardButton("Отмена", callback_data="remind_cancel")
