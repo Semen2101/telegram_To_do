@@ -17,14 +17,15 @@ def load_data():
     try:
         ref = db.reference('/')
         data = ref.get()
-        for user_id, value in data.items():
-            if isinstance(value, list):
-                data[user_id] = {"tasks": value, "reminders": []}
-        if data:
-            # Firebase возвращает ключи как строки, нужно преобразовать в int
-            return {int(k): v for k, v in data.items()}
+        if not data:
+            return {}
+        # Преобразуем ключи из строк в int
+        data = {int(k): v for k, v in data.items()}
+        # Запускаем миграцию для всех пользователей
+        data = migrate_user_data(data)
+        # Проверяем и исправляем структуру
         testing(data)
-        return {}
+        return data
     except Exception as e:
         print(f"Ошибка загрузки данных: {e}")
         return {}
@@ -51,3 +52,26 @@ def testing(data):
         # На всякий случай: если данные другого типа, создаём пустую структуру
         else:
             data[user_id] = {"tasks": [], "reminders": []}
+
+def migrate_user_data(user_data):
+    for user_id, user_dict in user_data.items():
+        # 1. Переносим старые задачи в категорию "📁 Общее", если они есть
+        if "tasks" in user_dict and isinstance(user_dict["tasks"], list):
+            if "categories" not in user_dict:
+                user_dict["categories"] = {}
+            # Если категория "Общее" уже существует, добавляем задачи в неё, иначе создаём
+            if "📁 Общее" not in user_dict["categories"]:
+                user_dict["categories"]["📁 Общее"] = []
+            user_dict["categories"]["📁 Общее"].extend(user_dict["tasks"])
+            del user_dict["tasks"]
+
+        # 2. Убеждаемся, что ключ "categories" существует (даже если пустой)
+        if "categories" not in user_dict:
+            user_dict["categories"] = {}
+
+        # 3. Добавляем поле "category" в старые напоминания
+        if "reminders" in user_dict:
+            for reminder in user_dict["reminders"]:
+                if "category" not in reminder:
+                    reminder["category"] = "📁 Общее"
+    return user_data

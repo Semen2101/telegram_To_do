@@ -52,11 +52,14 @@ application.add_handler(delete_conv_handler)
 application.add_handler(edit_conv_handler)
 application.add_handler(remind_conv_handler)
 application.add_handler(CommandHandler("list_r", show_remind))
-application.add_handler(MessageHandler(filters.Text(["📌 Напоминания"]), show_remind))
+application.add_handler(MessageHandler(filters.Text(["📌 Список напоминаний"]), show_remind))
 application.add_handler(CommandHandler("delete_r", delete_complete_remind))
 application.add_handler(MessageHandler(filters.Text(["🧹 Очистить выполненные"]), delete_complete_remind))
 application.add_handler(CommandHandler("p", keyBoard))
 application.add_handler(MessageHandler(filters.Text(["Скрыть меню"]), hide_keyBoard))
+application.add_handler(create_category_conv)
+application.add_handler(rename_category_conv)
+application.add_handler(delete_category_conv)
 
 
 # Восстановление напоминаний
@@ -69,19 +72,23 @@ for user_id, data in tasks.items():
     for rem in data.get("reminders", []):
         if rem.get("completed", False):
             continue
-        if rem.get("task_index") >= len(data["tasks"]):
+        cat_name = rem.get("category", "📁 Общее")
+        task_index = rem.get("task_index")
+        if (cat_name not in data.get("categories", {}) or
+            task_index >= len(data["categories"][cat_name])):
             continue
         dt = datetime.fromisoformat(rem["datetime_str"])
         if dt <= datetime.now(ZoneInfo("Europe/Berlin")):
             continue
-        task_text = data["tasks"][rem["task_index"]]
+        task_text = data["categories"][cat_name][task_index]
         application.job_queue.run_once(
             callback=send_reminder,
             when=dt,
             data={
                 "chat_id": rem["chat_id"],
                 "task_text": task_text,
-                "task_index": rem["task_index"],
+                "task_index": task_index,
+                "category": cat_name,
                 "datetime_str": rem["datetime_str"]
             }
         )
