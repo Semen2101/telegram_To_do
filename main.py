@@ -59,7 +59,10 @@ application.add_handler(CommandHandler("p", keyBoard))
 application.add_handler(MessageHandler(filters.Text(["Скрыть меню"]), hide_keyBoard))
 application.add_handler(create_category_conv)
 application.add_handler(rename_category_conv)
-application.add_handler(delete_category_conv)
+application.add_handler(delete_cat_handler)   # было delete_category_conv
+application.add_handler(CommandHandler("del_remind", delete_remind_start))
+application.add_handler(CallbackQueryHandler(delete_remind_callback, pattern="^delrem\\|"))
+application.add_handler(MessageHandler(filters.Text(["🗑 Удалить напоминание"]), delete_remind_start))
 
 
 # Восстановление напоминаний

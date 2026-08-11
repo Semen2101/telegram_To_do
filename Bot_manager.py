@@ -7,6 +7,7 @@ from json_manager import *
 from KeyBoard import *
 
 tasks = None
+bot_messages = {}  # {user_id: [message_id, ...]}
 
 def init_tasks():
     global tasks
@@ -14,6 +15,39 @@ def init_tasks():
     tasks = {int(k): v for k, v in raw.items()}
     if tasks is None:
         tasks = {}
+
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+
+async def send_self_destruct_message(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, reply_markup=None):
+    """Отправляет сообщение и запоминает его ID для удаления при следующем вводе пользователя."""
+    sent_message = await update.message.reply_text(text, reply_markup=reply_markup)
+    user_id = update.message.from_user.id
+    if user_id not in bot_messages:
+        bot_messages[user_id] = []
+    bot_messages[user_id].append(sent_message.message_id)
+    return sent_message
+
+async def clear_previous_bot_messages(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Удаляет все накопленные ответы бота для указанного пользователя."""
+    if user_id in bot_messages:
+        for msg_id in bot_messages[user_id]:
+            try:
+                await context.bot.delete_message(chat_id=user_id, message_id=msg_id)
+            except Exception as e:
+                print(f"Не удалось удалить сообщение {msg_id}: {e}")
+        bot_messages[user_id] = []
+
+async def delete_user_message(update: Update):
+    """Удаляет все сообщения пользователя, кроме /start и /p."""
+    if update.message and update.message.text:
+        if update.message.text.startswith('/start') or update.message.text == '/p':
+            return  # не удаляем приветствие и меню
+        try:
+            await update.message.delete()
+        except Exception as e:
+            print(f"Не удалось удалить сообщение пользователя: {e}")
+
+# ==================== СТАРТ И КЛАВИАТУРА ====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.from_user.username or "пользователь" 
@@ -34,10 +68,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message)
     await keyBoard(update, context)
 
+# ==================== РАБОТА С ЗАДАЧАМИ (СТАРЫЕ ВЕРСИИ УДАЛЕНЫ) ====================
+
 async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if tasks is None:
-        init_tasks()
     user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
     # Получаем текущую категорию (по умолчанию "📁 Общее")
     category = context.user_data.get("current_category", "📁 Общее")
     # Убеждаемся, что категория существует
@@ -55,73 +92,89 @@ async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tasks[user_id]["categories"][category].append(task_text)
         save_data(tasks)
         print(tasks)
-   
 
-async def task_list(update : Update, context : ContextTypes.DEFAULT_TYPE) :
+async def task_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
     if tasks is None:
         init_tasks()
-    user_id = update.message.from_user.id
     if user_id not in tasks or not tasks[user_id].get("categories"):
         tasks[user_id] = {"categories": {}, "reminders": []}
-        await send_self_destruct_message(update, context, "У вас нету задач") 
+        await send_self_destruct_message(update, context, "У вас нету задач")
     else:
         categories = tasks[user_id]["categories"]
         lines = []
         for category, tasks_list in categories.items():
             if not tasks_list:
-                continue  # пропускаем пустые категории
+                continue
             lines.append(f"📂 {category}:")
             for i, task in enumerate(tasks_list, start=1):
                 lines.append(f"  {i}. {task}")
-    if not lines:
-        await send_self_destruct_message(update, context, "У вас нету задач")
-    else:
-        await send_self_destruct_message(update, context, "\n".join(lines))
+        if not lines:
+            await send_self_destruct_message(update, context, "У вас нету задач")
+        else:
+            await send_self_destruct_message(update, context, "\n".join(lines))
 
-async def delete(update : Update, context : ContextTypes.DEFAULT_TYPE) :
-    if tasks is None:
-        init_tasks()
-    user_id = update.message.from_user.id
-    if user_id not in tasks or not tasks[user_id]["tasks"] :
-        tasks[user_id] = {"tasks": [], "reminders": []}
-        await send_self_destruct_message(update, context, "У вас нету задач")
-    else :
-        if not context.args :
-            await send_self_destruct_message(update, context, "введите номер задачи после команды /delete ")
-        try :
-            index = int(context.args[0]) -1
-            if 0 <= index < len(tasks[user_id]["tasks"]):
-                removed_task = tasks[user_id]["tasks"].pop(index)
-                save_data(tasks)
-                print(removed_task)
-                await send_self_destruct_message(update, context, f"Задача '{removed_task}' удалена!")
-            else :
-                await send_self_destruct_message(update, context, "Задачи с таким номером не существует")
-        except ValueError:
-            await send_self_destruct_message(update, context, "Номер должен быть числом")
+# async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     # Эта функция больше не используется, оставлена для совместимости, но теперь работает с категориями
+#     user_id = update.message.from_user.id
+#     await clear_previous_bot_messages(user_id, context)
+#     await delete_user_message(update)
 
-async def edit(update : Update, context : ContextTypes.DEFAULT_TYPE) :
-    if tasks is None:
-        init_tasks()
-    user_id = update.message.from_user.id
-    if user_id not in tasks or not tasks[user_id]["tasks"] :
-        tasks[user_id] = {"tasks": [], "reminders": []}
-        await send_self_destruct_message(update, context, "У вас нету задач")
-    else :
-        if not context.args :
-            await send_self_destruct_message(update, context, "Укажите номер задачи и новый текст после команды /edit ")
-        try :
-            index = int(context.args[0]) - 1
-            if 0 <= index < len(tasks[user_id]["tasks"]) and len(context.args) >= 2:
-                old = tasks[user_id]["tasks"][index]
-                new_text = " ".join(context.args[1:])
-                tasks[user_id]["tasks"][index] = new_text
-                save_data(tasks)
-                await send_self_destruct_message(update, context, f"Задача '{old}' изменена на '{new_text}'.")
-            else :
-                await send_self_destruct_message(update, context, "Введите новый текст задачи после команды /edit")    
-        except ValueError :
-            await send_self_destruct_message(update, context, "Номер должен быть числом")
+#     if tasks is None:
+#         init_tasks()
+#     if user_id not in tasks or not tasks[user_id].get("categories"):
+#         tasks[user_id] = {"categories": {}, "reminders": []}
+#         await send_self_destruct_message(update, context, "У вас нету задач")
+#     else:
+#         if not context.args:
+#             await send_self_destruct_message(update, context, "введите номер задачи после команды /delete ")
+#         else:
+#             try:
+#                 index = int(context.args[0]) - 1
+#                 # Ищем задачу по всем категориям? Нет, для старых вызовов используем категорию по умолчанию
+#                 cat_name = "📁 Общее"
+#                 if cat_name in tasks[user_id]["categories"] and 0 <= index < len(tasks[user_id]["categories"][cat_name]):
+#                     removed_task = tasks[user_id]["categories"][cat_name].pop(index)
+#                     save_data(tasks)
+#                     await send_self_destruct_message(update, context, f"Задача '{removed_task}' удалена!")
+#                 else:
+#                     await send_self_destruct_message(update, context, "Задачи с таким номером не существует")
+#             except ValueError:
+#                 await send_self_destruct_message(update, context, "Номер должен быть числом")
+
+# async def edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     # Эта функция больше не используется, оставлена для совместимости, но теперь работает с категориями
+#     user_id = update.message.from_user.id
+#     await clear_previous_bot_messages(user_id, context)
+#     await delete_user_message(update)
+
+#     if tasks is None:
+#         init_tasks()
+#     if user_id not in tasks or not tasks[user_id].get("categories"):
+#         tasks[user_id] = {"categories": {}, "reminders": []}
+#         await send_self_destruct_message(update, context, "У вас нету задач")
+#     else:
+#         if not context.args:
+#             await send_self_destruct_message(update, context, "Укажите номер задачи и новый текст после команды /edit ")
+#         else:
+#             try:
+#                 index = int(context.args[0]) - 1
+#                 cat_name = "📁 Общее"
+#                 if cat_name in tasks[user_id]["categories"] and 0 <= index < len(tasks[user_id]["categories"][cat_name]) and len(context.args) >= 2:
+#                     old = tasks[user_id]["categories"][cat_name][index]
+#                     new_text = " ".join(context.args[1:])
+#                     tasks[user_id]["categories"][cat_name][index] = new_text
+#                     save_data(tasks)
+#                     await send_self_destruct_message(update, context, f"Задача '{old}' изменена на '{new_text}'.")
+#                 else:
+#                     await send_self_destruct_message(update, context, "Введите новый текст задачи после команды /edit")    
+#             except ValueError:
+#                 await send_self_destruct_message(update, context, "Номер должен быть числом")
+
+# ==================== НАПОМИНАНИЯ ====================
 
 async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if tasks is None:
@@ -197,57 +250,53 @@ async def send_reminder(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"ОШИБКА в send_reminder: {e}")
 
-async def show_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
+async def show_remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
     if tasks is None:
         init_tasks()
-    user_id = update.message.from_user.id
-
     if user_id not in tasks:
-        tasks[user_id] = {"tasks": [], "reminders": []}
+        tasks[user_id] = {"categories": {}, "reminders": []}
         await send_self_destruct_message(update, context, "У вас нет активных напоминаний.")
         return
 
-    user_data = tasks[user_id]
-    reminders = user_data.get("reminders", [])
-    tasks_list = user_data.get("tasks", [])
-
+    reminders = tasks[user_id].get("reminders", [])
     if not reminders:
         await send_self_destruct_message(update, context, "У вас нет активных напоминаний.")
         return
-    
-    message_lines = ["📋 Ваши напоминания:"]
-    for i, remind in enumerate(reminders, start=1):
-        task_index = remind.get("task_index")
-        # Проверяем, существует ли задача с таким индексом
-        if task_index is not None and 0 <= task_index < len(tasks_list):
-            task_text = tasks_list[task_index]
-        else:
-            task_text = "(задача удалена)"
 
-        # Преобразуем дату в читаемый формат (если datetime_str есть)
-        datetime_str = remind.get("datetime_str", "")
+    lines = ["📋 Ваши напоминания:"]
+    for i, rem in enumerate(reminders, start=1):
+        cat_name = rem.get("category", "📁 Общее")
+        task_index = rem.get("task_index")
+        task_text = "❓"
+        if cat_name in tasks[user_id].get("categories", {}):
+            cat_tasks = tasks[user_id]["categories"][cat_name]
+            if 0 <= task_index < len(cat_tasks):
+                task_text = cat_tasks[task_index]
+
+        dt_str = rem.get("datetime_str", "")
         try:
-            # Парсим ISO строку и форматируем под нужный вид
-            dt = datetime.fromisoformat(datetime_str)
-            formatted_date = dt.strftime("%d.%m.%Y %H:%M")
+            dt = datetime.fromisoformat(dt_str)
+            formatted = dt.strftime("%d.%m.%Y %H:%M")
         except (ValueError, TypeError):
-            formatted_date = datetime_str  # если не удалось распарсить, выводим как есть
+            formatted = dt_str
 
-        completed = remind.get("completed", False)
-        status = "✅" if completed else "❌"
+        status = "✅" if rem.get("completed", False) else "❌"
+        lines.append(f'{i}. [{cat_name}] "{task_text}" — {formatted} {status}')
+    await send_self_destruct_message(update, context, "\n".join(lines))
 
-        # Собираем строку
-        line = f'{i}. "{task_text}" В: {formatted_date} completed: {completed} {status}'
-        message_lines.append(line)
+async def delete_complete_remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
 
-    await send_self_destruct_message(update, context, "\n".join(message_lines))
-
-async def delete_complete_remind(update: Update, context: ContextTypes.DEFAULT_TYPE) :
     if tasks is None:
         init_tasks()
-    user_id = update.message.from_user.id
     if user_id not in tasks:
-        tasks[user_id] = {"tasks": [], "reminders": []}
+        tasks[user_id] = {"categories": {}, "reminders": []}
         await send_self_destruct_message(update, context, "У вас нет напоминаний.")
         return
     
@@ -264,17 +313,13 @@ async def delete_complete_remind(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await send_self_destruct_message(update, context, "Нет выполненных напоминаний для удаления.")
 
-
-######################################################################################################################################################
-######################################################################################################################################################
-######################################################################################################################################################
+# ==================== ДИАЛОГИ ====================
 
 WAITING_FOR_TASK_TEXT = 1
 WAITING_FOR_CATEGORY_SELECT = 8
 
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    # Получаем все категории пользователя
     cats = tasks[user_id].get("categories", {})
     if not cats:
         await send_self_destruct_message(update, context, "У вас пока нет категорий. Создайте новую кнопкой 📁 Новая категория.")
@@ -286,6 +331,20 @@ async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выберите категорию:", reply_markup=InlineKeyboardMarkup(keyboard))
     return WAITING_FOR_CATEGORY_SELECT
 
+# async def add_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     query = update.callback_query
+#     await query.answer()
+#     data = query.data
+#     if data == "cancel":
+#         await query.edit_message_text("Добавление отменено.")
+#         return ConversationHandler.END
+#     # Извлекаем название категории
+#     cat_name = data.split("|")[1]
+#     # Сохраняем выбранную категорию
+#     context.user_data["current_category"] = cat_name
+#     await query.edit_message_text("Введите текст задачи (или /cancel для отмены):")
+#     return WAITING_FOR_TASK_TEXT
+
 async def add_task_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task_text = update.message.text
     context.args = update.message.text.split()
@@ -293,7 +352,7 @@ async def add_task_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_self_destruct_message(update, context, f"Задача '{task_text}' добавлена!")
     return ConversationHandler.END
 
-######################################################################################################################################################
+# -------------------- УДАЛЕНИЕ --------------------
 
 WAITING_FOR_TASK_NUM = 2
 WAITING_FOR_DELETE_CATEGORY = 9
@@ -311,12 +370,6 @@ async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выберите категорию для удаления задачи:", reply_markup=InlineKeyboardMarkup(keyboard))
     return WAITING_FOR_DELETE_CATEGORY
 
-async def delete_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    delete_num = update.message.text
-    context.args = [update.message.text]
-    await delete(update, context)
-    return ConversationHandler.END
-
 async def delete_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -326,17 +379,20 @@ async def delete_category_selection(update: Update, context: ContextTypes.DEFAUL
         return ConversationHandler.END
     cat_name = data.split("|")[1]
     context.user_data["delete_category"] = cat_name
-    user_id = query.message.chat.id  # chat_id равен user_id в личке
+    user_id = query.message.chat.id
     tasks_list = tasks[user_id]["categories"].get(cat_name, [])
     if not tasks_list:
         await query.edit_message_text(f"В категории '{cat_name}' нет задач.")
         return ConversationHandler.END
     lines = "\n".join(f"{i}. {task}" for i, task in enumerate(tasks_list, start=1))
     await query.edit_message_text(f"Задачи в '{cat_name}':\n{lines}\n\nВведите номер задачи для удаления (или /cancel):")
-    return WAITING_FOR_TASK_NUM  # используем уже существующее состояние (2)
+    return WAITING_FOR_TASK_NUM
 
 async def delete_task_by_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
     cat_name = context.user_data.get("delete_category")
     if not cat_name:
         await send_self_destruct_message(update, context, "Ошибка: не выбрана категория.")
@@ -344,7 +400,6 @@ async def delete_task_by_number(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         index = int(update.message.text) - 1
         if 0 <= index < len(tasks[user_id]["categories"][cat_name]):
-            # Удаляем задачу из списка категории
             removed_task = tasks[user_id]["categories"][cat_name].pop(index)
             save_data(tasks)
             await send_self_destruct_message(update, context, f"Задача '{removed_task}' удалена!")
@@ -354,12 +409,11 @@ async def delete_task_by_number(update: Update, context: ContextTypes.DEFAULT_TY
         await send_self_destruct_message(update, context, "Номер должен быть числом.")
     return ConversationHandler.END
 
-######################################################################################################################################################
+# -------------------- РЕДАКТИРОВАНИЕ --------------------
 
-WAITING_FOR_EDIT_NUM1 = 3
-WAITING_FOR_EDIT_TEXT1 = 4
 WAITING_FOR_EDIT_CATEGORY = 11
 WAITING_FOR_EDIT_TASK_NUM = 12
+WAITING_FOR_EDIT_TEXT1 = 4
 
 async def edit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -373,39 +427,6 @@ async def edit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("Отмена", callback_data="cancel")])
     await update.message.reply_text("Выберите категорию для редактирования задачи:", reply_markup=InlineKeyboardMarkup(keyboard))
     return WAITING_FOR_EDIT_CATEGORY
-
-async def edit_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    try:
-        index = int(update.message.text) - 1
-        if user_id in tasks and 0 <= index < len(tasks[user_id]["tasks"]):
-            # Сохраняем номер для следующего шага
-            context.user_data['edit_index'] = index
-            await send_self_destruct_message(update, context, "Введите новый текст задачи:")
-            return WAITING_FOR_EDIT_TEXT1
-        else:
-            await send_self_destruct_message(update, context, "Неверный номер. Попробуйте снова (или /cancel):")
-            return None  # остаёмся в том же состоянии
-    except ValueError:
-        await send_self_destruct_message(update, context, "Это не число. Введите номер задачи:")
-        return None
-
-async def edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    new_text = update.message.text
-    index = context.user_data.get('edit_index')
-    if index is None:
-        await send_self_destruct_message(update, context, "Ошибка: не найден номер задачи. Диалог отменён.")
-        return ConversationHandler.END
-    
-    # Эмулируем команду /edit <номер> <новый текст>
-    context.args = [str(index + 1), new_text]
-    
-    # Вызываем старую функцию edit
-    await edit(update, context)
-    
-    # Очищаем временные данные
-    context.user_data.clear()
-    return ConversationHandler.END
 
 async def edit_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -427,6 +448,9 @@ async def edit_category_selection(update: Update, context: ContextTypes.DEFAULT_
 
 async def edit_task_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
     cat_name = context.user_data.get("edit_category")
     if not cat_name:
         await send_self_destruct_message(update, context, "Ошибка: не выбрана категория.")
@@ -436,14 +460,14 @@ async def edit_task_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if 0 <= index < len(tasks[user_id]["categories"][cat_name]):
             context.user_data["edit_index"] = index
             await send_self_destruct_message(update, context, "Введите новый текст задачи:")
-            return WAITING_FOR_EDIT_TEXT1  # уже существующее состояние 4
+            return WAITING_FOR_EDIT_TEXT1
         else:
             await send_self_destruct_message(update, context, "Задачи с таким номером не существует.")
             return None
     except ValueError:
         await send_self_destruct_message(update, context, "Номер должен быть числом.")
         return None
-    
+
 async def edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     cat_name = context.user_data.get("edit_category")
@@ -459,13 +483,11 @@ async def edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     return ConversationHandler.END
 
-######################################################################################################################################################
+# -------------------- НАПОМИНАНИЕ --------------------
 
-WAITING_FOR_REMIND_NUM = 5
-WAITING_FOR_REMIND_DATETIME = 6
-WAITING_FOR_REMIND_CALENDAR = 7
 WAITING_FOR_REMIND_CATEGORY = 13
 WAITING_FOR_REMIND_TASK_NUM = 14
+WAITING_FOR_REMIND_CALENDAR = 7
 
 async def remind_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -480,35 +502,53 @@ async def remind_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выберите категорию для напоминания:", reply_markup=InlineKeyboardMarkup(keyboard))
     return WAITING_FOR_REMIND_CATEGORY
 
-async def remind_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def remind_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "cancel":
+        await query.edit_message_text("Напоминание отменено.")
+        return ConversationHandler.END
+    cat_name = data.split("|")[1]
+    context.user_data["remind_category"] = cat_name
+    user_id = query.message.chat.id
+    tasks_list = tasks[user_id]["categories"].get(cat_name, [])
+    if not tasks_list:
+        await query.edit_message_text(f"В категории '{cat_name}' нет задач.")
+        return ConversationHandler.END
+    lines = "\n".join(f"{i}. {task}" for i, task in enumerate(tasks_list, start=1))
+    await query.edit_message_text(f"Задачи в '{cat_name}':\n{lines}\n\nВведите номер задачи (или /cancel):")
+    return WAITING_FOR_REMIND_TASK_NUM
+
+async def remind_task_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
+    cat_name = context.user_data.get("remind_category")
+    if not cat_name:
+        await send_self_destruct_message(update, context, "Ошибка: не выбрана категория.")
+        return ConversationHandler.END
     try:
         index = int(update.message.text) - 1
-        if 0 <= index < len(tasks[user_id]["tasks"]):
-            context.user_data["original_update"] = update
-            # ЗАДАЧА СУЩЕСТВУЕТ
+        if 0 <= index < len(tasks[user_id]["categories"][cat_name]):
             context.user_data["remind_index"] = index
-            # СЮДА ПОТОМ ДОБАВИМ КЛАВИАТУРУ
+            context.user_data["original_update"] = update
             year = datetime.now().year
-            btn = InlineKeyboardButton(f"{year}", callback_data=f"remind_calendar|year|{year}|None|None|None|None")
-            btn1 = InlineKeyboardButton(f"{year+1}", callback_data=f"remind_calendar|year|{year+1}|None|None|None|None")
-            btn2 = InlineKeyboardButton(f"{year+2}", callback_data=f"remind_calendar|year|{year+2}|None|None|None|None")
+            btn = InlineKeyboardButton(str(year), callback_data=f"remind_calendar|year|{year}|None|None|None|None")
+            btn1 = InlineKeyboardButton(str(year+1), callback_data=f"remind_calendar|year|{year+1}|None|None|None|None")
+            btn2 = InlineKeyboardButton(str(year+2), callback_data=f"remind_calendar|year|{year+2}|None|None|None|None")
             btn_cancel = InlineKeyboardButton("Отмена", callback_data="remind_cancel")
-            buttons_rows = [
-                [btn, btn1, btn2], [btn_cancel]
-            ]
-
-            await send_self_destruct_message(update, context, "Выберите год:", reply_markup=InlineKeyboardMarkup(buttons_rows))
-
+            buttons_rows = [[btn, btn1, btn2], [btn_cancel]]
+            await update.message.reply_text("Выберите год:", reply_markup=InlineKeyboardMarkup(buttons_rows))
             return WAITING_FOR_REMIND_CALENDAR
         else:
-            # НЕВЕРНЫЙ НОМЕР
-            await send_self_destruct_message(update, context, "Такой задачи не существует. Введите номер существующей задачи (или /cancel).")
+            await send_self_destruct_message(update, context, "Такой задачи не существует. Попробуйте снова (или /cancel).")
             return None
     except ValueError:
         await send_self_destruct_message(update, context, "Введите номер задачи числом (или /cancel).")
         return None
-    
+
 async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -524,11 +564,6 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
             await cancel(orig_update, context)
         else:
             await query.edit_message_text("Напоминание отменено.")
-            context.job_queue.run_once(
-                delete_message_callback,
-                when=10,  # 10 секунд, чтобы успеть прочитать
-                data={"chat_id": query.message.chat_id, "message_id": query.message.message_id}
-            )
         return ConversationHandler.END
 
     parts = data.split("|")
@@ -570,18 +605,16 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
         year = int(parts[2])
         month = int(parts[3])
         day = int(parts[4])
-        # Сохраняем день в context.user_data, чтобы использовать позже
         context.user_data["remind_day"] = day
         context.user_data["remind_year"] = year
         context.user_data["remind_month"] = month
 
-        # Создаём клавиатуру часов (0-23)
         keyboard = []
         row = []
         for hour in range(24):
             callback = f"remind_calendar|hour|{year}|{month}|{day}|{hour}|None"
             row.append(InlineKeyboardButton(str(hour), callback_data=callback))
-            if len(row) == 6:  # по 6 кнопок в ряд
+            if len(row) == 6:
                 keyboard.append(row)
                 row = []
         if row:
@@ -597,7 +630,6 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
         hour = int(parts[5])
         context.user_data["remind_hour"] = hour
 
-        # Минуты с шагом 15
         minutes = [0, 15, 30, 45]
         keyboard = []
         for minute in minutes:
@@ -618,18 +650,12 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
 
         if dt <= datetime.now(ZoneInfo("Europe/Berlin")):
             await query.edit_message_text("Это время уже прошло. Напоминание не установлено.")
-            context.job_queue.run_once(
-                delete_message_callback,
-                when=10,
-                data={"chat_id": query.message.chat_id, "message_id": query.message.message_id})
-            
             context.user_data.clear()
             return ConversationHandler.END
 
-        # Номер задачи из context.user_data
         task_index = context.user_data["remind_index"] + 1
         datetime_str = dt.strftime("%Y-%m-%d %H:%M")
-        date_part, time_part = datetime_str.split()  # разделяем на дату и время
+        date_part, time_part = datetime_str.split()
         context.args = [str(task_index), date_part, time_part]
 
         orig_update = context.user_data.get("original_update")
@@ -638,20 +664,16 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
             await remind(orig_update, context)
         else:
             await query.edit_message_text("Ошибка: не удалось восстановить сессию.")
-            context.job_queue.run_once(
-                delete_message_callback,
-                when=10,
-                data={"chat_id": query.message.chat_id, "message_id": query.message.message_id}
-            )
+            context.user_data.clear()
+            return ConversationHandler.END    
 
-        # Очищаем временные данные
         context.user_data.clear()
         return ConversationHandler.END
-    
+
     elif step == "nav_month":
         year = int(parts[2])
         month = int(parts[3])
-        action = parts[4]  # "prev" или "next"
+        action = parts[4]
 
         if action == "prev":
             month -= 1
@@ -664,150 +686,44 @@ async def remind_calendar_handler(update: Update, context: ContextTypes.DEFAULT_
                 month = 1
                 year += 1
 
-        # Показать календарь для новых year, month
         keyboard = build_calendar_keyboard(year, month)
         await query.edit_message_text("Выберите день:", reply_markup=keyboard)
-        return None    
+        return None
 
 import calendar
 
 def build_calendar_keyboard(year, month):
-    # Получаем первый день недели (0=Пн, 6=Вс) и число дней
     first_weekday, days_in_month = calendar.monthrange(year, month)
-    
     keyboard = []
-    
-    # Заголовки дней недели
     week_days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
     header_row = [InlineKeyboardButton(day, callback_data="ignore") for day in week_days]
     keyboard.append(header_row)
     
-    # Строка текущей недели
     row = []
-    # Пустые кнопки до первого дня
     for _ in range(first_weekday):
         row.append(InlineKeyboardButton(" ", callback_data="ignore"))
     
-    # Дни месяца
     for day in range(1, days_in_month + 1):
         callback = f"remind_calendar|day|{year}|{month}|{day}|None|None"
         row.append(InlineKeyboardButton(str(day), callback_data=callback))
         if len(row) == 7:
             keyboard.append(row)
             row = []
-    
-    # Заполняем оставшиеся ячейки пустыми кнопками
     if row:
         while len(row) < 7:
             row.append(InlineKeyboardButton(" ", callback_data="ignore"))
         keyboard.append(row)
     
-    # Строка навигации
     nav_row = [
         InlineKeyboardButton("<", callback_data=f"remind_calendar|nav_month|{year}|{month}|prev"),
         InlineKeyboardButton(f"{calendar.month_name[month]} {year}", callback_data="ignore"),
         InlineKeyboardButton(">", callback_data=f"remind_calendar|nav_month|{year}|{month}|next")
     ]
     keyboard.append(nav_row)
-    
-    # Кнопка "Отмена"
     keyboard.append([InlineKeyboardButton("Отмена", callback_data="remind_cancel")])
-    
     return InlineKeyboardMarkup(keyboard)
 
-async def remind_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    if data == "cancel":
-        await query.edit_message_text("Напоминание отменено.")
-        return ConversationHandler.END
-    cat_name = data.split("|")[1]
-    context.user_data["remind_category"] = cat_name
-    user_id = query.message.chat.id
-    tasks_list = tasks[user_id]["categories"].get(cat_name, [])
-    if not tasks_list:
-        await query.edit_message_text(f"В категории '{cat_name}' нет задач.")
-        return ConversationHandler.END
-    lines = "\n".join(f"{i}. {task}" for i, task in enumerate(tasks_list, start=1))
-    await query.edit_message_text(f"Задачи в '{cat_name}':\n{lines}\n\nВведите номер задачи (или /cancel):")
-    return WAITING_FOR_REMIND_TASK_NUM
-
-async def remind_task_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    cat_name = context.user_data.get("remind_category")
-    if not cat_name:
-        await send_self_destruct_message(update, context, "Ошибка: не выбрана категория.")
-        return ConversationHandler.END
-    try:
-        index = int(update.message.text) - 1
-        if 0 <= index < len(tasks[user_id]["categories"][cat_name]):
-            context.user_data["remind_index"] = index
-            context.user_data["original_update"] = update  # сохраняем для финального вызова remind
-            year = datetime.now().year
-            btn = InlineKeyboardButton(str(year), callback_data=f"remind_calendar|year|{year}|None|None|None|None")
-            btn1 = InlineKeyboardButton(str(year+1), callback_data=f"remind_calendar|year|{year+1}|None|None|None|None")
-            btn2 = InlineKeyboardButton(str(year+2), callback_data=f"remind_calendar|year|{year+2}|None|None|None|None")
-            btn_cancel = InlineKeyboardButton("Отмена", callback_data="remind_cancel")
-            buttons_rows = [[btn, btn1, btn2], [btn_cancel]]
-            await update.message.reply_text("Выберите год:", reply_markup=InlineKeyboardMarkup(buttons_rows))
-            return WAITING_FOR_REMIND_CALENDAR
-        else:
-            await send_self_destruct_message(update, context, "Такой задачи не существует. Попробуйте снова (или /cancel).")
-            return None
-    except ValueError:
-        await send_self_destruct_message(update, context, "Введите номер задачи числом (или /cancel).")
-        return None
-
-######################################################################################################################################################
-
-async def send_self_destruct_message(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, delete_after: int = 600, reply_markup=None):
-    sent_message = await update.message.reply_text(text, reply_markup=reply_markup)
-    context.job_queue.run_once(
-        delete_message_callback,
-        when=delete_after,
-        data={"chat_id": sent_message.chat_id, "message_id": sent_message.message_id}
-    )
-    return sent_message 
-
-async def delete_message_callback(context: ContextTypes.DEFAULT_TYPE):
-    job_data = context.job.data
-    try:
-        await context.bot.delete_message(chat_id=job_data["chat_id"], message_id=job_data["message_id"])
-    except Exception as e:
-        print(f"Не удалось удалить сообщение: {e}")
-
-######################################################################################################################################################
-WAITING_FOR_CATEGORY_SELECT = 10
-
-async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str):
-    user_id = update.message.from_user.id  # или update.callback_query...
-    cats = tasks[user_id]["categories"]
-    if not cats:
-        await update.message.reply_text("Нет категорий. Создайте новую.")
-        return None  # или перейти к созданию
-    keyboard = []
-    for cat_name in cats.keys():
-        keyboard.append([InlineKeyboardButton(cat_name, callback_data=f"select_cat|{cat_name}")])
-    keyboard.append([InlineKeyboardButton("Отмена", callback_data="cancel")])
-    await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
-    return WAITING_FOR_CATEGORY_SELECT
-
-async def add_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    if data == "cancel":
-        await query.edit_message_text("Добавление отменено.")
-        return ConversationHandler.END
-    # Извлекаем название категории
-    cat_name = data.split("|")[1]
-    # Сохраняем выбранную категорию
-    context.user_data["current_category"] = cat_name
-    await query.edit_message_text("Введите текст задачи (или /cancel для отмены):")
-    return WAITING_FOR_TASK_TEXT
-
-######################################################################################################################################################
+# -------------------- УПРАВЛЕНИЕ КАТЕГОРИЯМИ --------------------
 
 WAITING_FOR_CATEGORY_NAME = 15
 WAITING_FOR_RENAME_CATEGORY = 16
@@ -819,6 +735,9 @@ async def create_category_start(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def create_category_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
     cat_name = update.message.text.strip()
     if not cat_name:
         await send_self_destruct_message(update, context, "Название не может быть пустым. Попробуйте снова:")
@@ -863,6 +782,9 @@ async def rename_category_selection(update: Update, context: ContextTypes.DEFAUL
 
 async def rename_category_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
     old_name = context.user_data.get("rename_old_name")
     if not old_name:
         await send_self_destruct_message(update, context, "Ошибка: не выбрана категория.")
@@ -874,9 +796,7 @@ async def rename_category_finish(update: Update, context: ContextTypes.DEFAULT_T
     if new_name in tasks[user_id]["categories"]:
         await send_self_destruct_message(update, context, f"Категория '{new_name}' уже существует.")
         return None
-    # Переносим задачи в новый ключ
     tasks[user_id]["categories"][new_name] = tasks[user_id]["categories"].pop(old_name)
-    # Обновляем напоминания
     if "reminders" in tasks[user_id]:
         for rem in tasks[user_id]["reminders"]:
             if rem.get("category") == old_name:
@@ -899,7 +819,7 @@ async def delete_category_start(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text("Выберите категорию для удаления (задачи будут потеряны!):", reply_markup=InlineKeyboardMarkup(keyboard))
     return WAITING_FOR_DELETE_CATEGORY_CONFIRM
 
-async def delete_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def delete_category_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -911,17 +831,67 @@ async def delete_category_selection(update: Update, context: ContextTypes.DEFAUL
     if cat_name not in tasks[user_id].get("categories", {}):
         await query.edit_message_text("Категория не найдена.")
         return ConversationHandler.END
-    # Удаляем категорию
     del tasks[user_id]["categories"][cat_name]
-    # Удаляем связанные напоминания
     if "reminders" in tasks[user_id]:
         tasks[user_id]["reminders"] = [r for r in tasks[user_id]["reminders"] if r.get("category") != cat_name]
     save_data(tasks)
     await query.edit_message_text(f"Категория '{cat_name}' удалена.")
     return ConversationHandler.END
 
+# -------------------- УДАЛЕНИЕ ОДНОГО НАПОМИНАНИЯ --------------------
 
-######################################################################################################################################################
+async def delete_remind_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает список напоминаний с кнопками для удаления."""
+    if tasks is None:
+        init_tasks()
+    user_id = update.message.from_user.id
+    await clear_previous_bot_messages(user_id, context)
+    await delete_user_message(update)
+
+    reminders = tasks[user_id].get("reminders", [])
+    if not reminders:
+        await send_self_destruct_message(update, context, "У вас нет напоминаний.")
+        return
+
+    keyboard = []
+    for i, rem in enumerate(reminders):
+        cat = rem.get("category", "📁 Общее")
+        task_text = "❓"
+        if cat in tasks[user_id].get("categories", {}):
+            cat_tasks = tasks[user_id]["categories"][cat]
+            idx = rem.get("task_index", 0)
+            if 0 <= idx < len(cat_tasks):
+                task_text = cat_tasks[idx]
+        btn_text = f"{i+1}. {task_text}"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"delrem|{i}")])
+    keyboard.append([InlineKeyboardButton("Отмена", callback_data="cancel")])
+    await update.message.reply_text("Выберите напоминание для удаления:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def delete_remind_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "cancel":
+        await query.edit_message_text("Отменено.")
+        return ConversationHandler.END
+    index = int(data.split("|")[1])
+    user_id = query.message.chat.id
+    reminders = tasks[user_id].get("reminders", [])
+    if 0 <= index < len(reminders):
+        removed = reminders.pop(index)
+        save_data(tasks)
+        await query.edit_message_text(f"Напоминание удалено.")
+    else:
+        await query.edit_message_text("Неверный номер.")
+
+# -------------------- ОТМЕНА --------------------
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_self_destruct_message(update, context, "отменено.")
+    return ConversationHandler.END
+
+async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Отменено.")
     return ConversationHandler.END

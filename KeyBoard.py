@@ -6,7 +6,7 @@ from datetime import datetime
 async def keyBoard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     button_layout = [
     [KeyboardButton("➕ Добавить"), KeyboardButton("📋 Список"), KeyboardButton("🗑 Удалить"), KeyboardButton("✏️ Изменить")],
-    [KeyboardButton("⏰ Напомнить"), KeyboardButton("📌 Список напоминаний"), KeyboardButton("🧹 Очистить выполненные")],
+    [KeyboardButton("⏰ Напомнить"), KeyboardButton("📌 Список напоминаний"), KeyboardButton("🗑 Удалить напоминание"), KeyboardButton("🧹 Очистить выполненные")],
     [KeyboardButton("📁 Новая категория"), KeyboardButton("✏️ Переименовать категорию"), KeyboardButton("🗑 Удалить категорию")],
     [KeyboardButton("Скрыть меню")]]
 
