@@ -53,17 +53,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.from_user.username or "пользователь" 
     message = textwrap.dedent(f"""\
         Привет, {user_name}!
-        Вот все команды для работы с ботом (v3 relese auto delete message)):
-        
-        1. /add "ваша задача" — добавит задачу в список
-        2. /list — покажет все ваши задачи с номерами
-        3. /delete "номер" — удалит задачу по номеру
-        4. /edit "номер" "новый текст" — изменит задачу
-        5. /remind "номер" "дата" "время" — установит напоминание
-           (формат: /remind 1 2006-12-08 03:15)
-        6. /list_r — покажет все ваши напоминания
-        7. /delete_r — удалит все выполненные напоминания
-        8. /p — открыть меню команд
     """)
     await update.message.reply_text(message)
     await keyBoard(update, context)
@@ -331,19 +320,19 @@ async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выберите категорию:", reply_markup=InlineKeyboardMarkup(keyboard))
     return WAITING_FOR_CATEGORY_SELECT
 
-# async def add_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-#     query = update.callback_query
-#     await query.answer()
-#     data = query.data
-#     if data == "cancel":
-#         await query.edit_message_text("Добавление отменено.")
-#         return ConversationHandler.END
-#     # Извлекаем название категории
-#     cat_name = data.split("|")[1]
-#     # Сохраняем выбранную категорию
-#     context.user_data["current_category"] = cat_name
-#     await query.edit_message_text("Введите текст задачи (или /cancel для отмены):")
-#     return WAITING_FOR_TASK_TEXT
+async def add_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "cancel":
+        await query.edit_message_text("Добавление отменено.")
+        return ConversationHandler.END
+    # Извлекаем название категории
+    cat_name = data.split("|")[1]
+    # Сохраняем выбранную категорию
+    context.user_data["current_category"] = cat_name
+    await query.edit_message_text("Введите текст задачи (или /cancel для отмены):")
+    return WAITING_FOR_TASK_TEXT
 
 async def add_task_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task_text = update.message.text

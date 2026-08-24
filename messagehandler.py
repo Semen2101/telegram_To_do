@@ -7,7 +7,7 @@ add_conv_handler = ConversationHandler(
         CommandHandler("add", add_start),
     ],
     states={
-        WAITING_FOR_CATEGORY_SELECT: [CallbackQueryHandler(add_start, pattern="^select_cat\\|")],
+        WAITING_FOR_CATEGORY_SELECT: [CallbackQueryHandler(add_category_selection, pattern="^select_cat\\|")],
         WAITING_FOR_TASK_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_task_text)]
     },
     fallbacks=[CommandHandler("cancel", cancel),
