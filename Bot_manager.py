@@ -308,6 +308,7 @@ WAITING_FOR_TASK_TEXT = 1
 WAITING_FOR_CATEGORY_SELECT = 8
 
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(">>> ADD_START CALLED")
     user_id = update.message.from_user.id
     cats = tasks[user_id].get("categories", {})
     if not cats:
@@ -321,6 +322,7 @@ async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WAITING_FOR_CATEGORY_SELECT
 
 async def add_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f">>> ADD_CATEGORY_CALLED: {update.callback_query.data}")
     query = update.callback_query
     await query.answer()
     data = query.data
