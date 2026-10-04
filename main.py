@@ -35,7 +35,7 @@ from Bot_manager import *
 
 # Инициализируем данные из Firebase
 init_tasks()
-print("=== TASKS AFTER INIT:", tasks)
+
 # Запускаем Flask в фоновом потоке
 web_thread = threading.Thread(target=run_web)
 web_thread.daemon = True

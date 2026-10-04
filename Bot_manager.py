@@ -12,9 +12,9 @@ bot_messages = {}  # {user_id: [message_id, ...]}
 def init_tasks():
     global tasks
     raw = load_data()
-    tasks = {int(k): v for k, v in raw.items()}
-    if tasks is None:
-        tasks = {}
+    print("=== RAW FROM FIREBASE:", raw)          # ← покажет, что вернул Firebase
+    tasks = {int(k): v for k, v in raw.items()} if raw else {}
+    print("=== TASKS IN BOT_MANAGER:", tasks)    # ← покажет, что лежит в tasks
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
