@@ -96,4 +96,11 @@ for user_id, data in tasks.items():
             }
         )
 
+async def error_handler(update, context):
+    import traceback
+    print("!!! ОШИБКА:", context.error)
+    traceback.print_exc()
+
+application.add_error_handler(error_handler)
+
 application.run_polling()
