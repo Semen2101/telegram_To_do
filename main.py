@@ -103,4 +103,5 @@ async def error_handler(update, context):
 
 application.add_error_handler(error_handler)
 
-application.run_polling()
+from telegram import Update
+application.run_polling(allowed_updates=Update.ALL_TYPES)
